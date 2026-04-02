@@ -1,0 +1,159 @@
+version: '3.8'
+
+services:
+
+  # ─────────────────────────────
+  # PostgreSQL + PostGIS
+  # ─────────────────────────────
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: carpool_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: carpool
+      POSTGRES_PASSWORD: carpool123
+      POSTGRES_DB: carpool
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d   # runs SQL files on first boot
+    networks:
+      - carpool_net
+
+  # ─────────────────────────────
+  # Redis
+  # ─────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: carpool_redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - carpool_net
+
+  # ─────────────────────────────
+  # Zookeeper (required by Kafka)
+  # ─────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: carpool_zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - carpool_net
+
+  # ─────────────────────────────
+  # Kafka
+  # ─────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: carpool_kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    ports:
+      - '9092:9092'
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    networks:
+      - carpool_net
+
+  # ─────────────────────────────
+  # Services (uncomment as you build each one)
+  # ─────────────────────────────
+
+  # auth-service:
+  #   build: ./auth-service
+  #   container_name: carpool_auth
+  #   restart: unless-stopped
+  #   ports:
+  #     - '3001:3001'
+  #   env_file: ./auth-service/.env
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   networks:
+  #     - carpool_net
+
+  # ride-service:
+  #   build: ./ride-service
+  #   container_name: carpool_ride
+  #   restart: unless-stopped
+  #   ports:
+  #     - '3002:3002'
+  #   env_file: ./ride-service/.env
+  #   depends_on:
+  #     - postgres
+  #     - kafka
+  #   networks:
+  #     - carpool_net
+
+  # fare-service:
+  #   build: ./fare-service
+  #   container_name: carpool_fare
+  #   restart: unless-stopped
+  #   ports:
+  #     - '3003:3003'
+  #   env_file: ./fare-service/.env
+  #   depends_on:
+  #     - postgres
+  #   networks:
+  #     - carpool_net
+
+  # payment-service:
+  #   build: ./payment-service
+  #   container_name: carpool_payment
+  #   restart: unless-stopped
+  #   ports:
+  #     - '3004:3004'
+  #   env_file: ./payment-service/.env
+  #   depends_on:
+  #     - postgres
+  #     - kafka
+  #   networks:
+  #     - carpool_net
+
+  # notification-service:
+  #   build: ./notification-service
+  #   container_name: carpool_notification
+  #   restart: unless-stopped
+  #   ports:
+  #     - '3005:3005'
+  #   env_file: ./notification-service/.env
+  #   depends_on:
+  #     - kafka
+  #   networks:
+  #     - carpool_net
+
+  # api-gateway:
+  #   build: ./api-gateway
+  #   container_name: carpool_gateway
+  #   restart: unless-stopped
+  #   ports:
+  #     - '3000:3000'
+  #   env_file: ./api-gateway/.env
+  #   depends_on:
+  #     - redis
+  #   networks:
+  #     - carpool_net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  carpool_net:
+    driver: bridge
