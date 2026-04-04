@@ -4,6 +4,7 @@ import useAuth from '../context/useAuth';
 import { paymentAPI } from '../api';
 import api from '../api';
 import { parseServerDate } from '../utils/datetime';
+import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
 
 export default function PayNow() {
   const { bookingId } = useParams();
@@ -48,14 +49,16 @@ export default function PayNow() {
     try {
       const res = await api.get(`/rides/booking/${bookingId}`);
       setBooking(res.data.booking);
-    } catch {
-      setError('Booking not found');
+    } catch (err) {
+      const message = getApiErrorMessage(err, 'Booking not found');
+      setError(message);
+      showErrorToast(message);
     }
     setLoading(false);
   };
 
   const pay = async () => {
-    if (!booking) return;
+    if (paying || !booking || timeLeft === 'Expired') return;
     setPaying(true);
     setError('');
     try {
@@ -82,6 +85,7 @@ export default function PayNow() {
               razorpaySignature: response.razorpay_signature,
               bookingId: booking.id,
             });
+            showSuccessToast('Payment successful. Your seat is confirmed.');
             setPaid(true);
           },
           prefill: { name: user.name, email: user.email },
@@ -96,12 +100,16 @@ export default function PayNow() {
           razorpaySignature: '',
           bookingId: booking.id,
         });
+        showSuccessToast('Payment successful. Your seat is confirmed.');
         setPaid(true);
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Payment failed');
+      const message = getApiErrorMessage(err, 'Payment failed');
+      setError(message);
+      showErrorToast(message);
+    } finally {
+      setPaying(false);
     }
-    setPaying(false);
   };
 
   if (loading) return (

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { rideAPI } from '../api';
 import 'leaflet/dist/leaflet.css';
+import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
 
 const ORS_KEY = import.meta.env.VITE_ORS_API_KEY || '';
 
@@ -141,11 +142,12 @@ export default function PostRide() {
   };
 
   const postRide = async () => {
-    if (!pickup || !drop || !routeInfo) return;
+    if (loading || !pickup || !drop || !routeInfo) return;
 
     const departureAt = new Date(`${form.date}T${form.time}:00+05:30`);
     if (Number.isNaN(departureAt.getTime()) || departureAt.getTime() <= Date.now()) {
       setStatus({ type: 'error', msg: 'Please choose a future departure date and time.' });
+      showErrorToast('Please choose a future departure date and time.');
       return;
     }
 
@@ -164,9 +166,12 @@ export default function PostRide() {
         mileage: parseFloat(form.mileage),
         description: form.description || '',
       });
+      showSuccessToast('Ride posted successfully.');
       navigate('/dashboard');
     } catch (err) {
-      setStatus({ type: 'error', msg: err.response?.data?.error || 'Failed to post ride' });
+      const message = getApiErrorMessage(err, 'Failed to post ride');
+      setStatus({ type: 'error', msg: message });
+      showErrorToast(message);
     } finally {
       setLoading(false);
     }

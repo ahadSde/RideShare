@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import useAuth from '../context/useAuth';
 import { rideAPI, paymentAPI } from '../api';
+import { calculateFare } from '../utils/fare';
+import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
 
 export default function Confirm() {
   const { bookingId } = useParams();
@@ -10,7 +12,8 @@ export default function Confirm() {
   const navigate      = useNavigate();
 
   const { ride, pickup, drop, riderDist } = state || {};
-  const fareAmount = ride ? Math.round(riderDist * ride.price_per_km) + 1 : 0;
+  const fareBreakdown = ride ? calculateFare(riderDist, ride.price_per_km) : { baseFare: 0, platformFee: 1, totalFare: 0 };
+  const fareAmount = fareBreakdown.totalFare;
 
   const [booking, setBooking]   = useState(null);
   const [step,    setStep]      = useState('review'); // review | booked | paying | paid | error
@@ -18,6 +21,7 @@ export default function Confirm() {
 
   // Step 1 — Book the seat
   const bookSeat = async () => {
+    if (step === 'paying') return;
     setStep('paying');
     try {
       const res = await rideAPI.book(ride.id, {
@@ -31,14 +35,18 @@ export default function Confirm() {
       });
       setBooking(res.data.booking);
       setStep('booked');
+      showSuccessToast('Seat booked. Complete payment to confirm.');
     } catch (err) {
-      setError(err.response?.data?.error || 'Booking failed. Please try again.');
+      const message = getApiErrorMessage(err, 'Booking failed. Please try again.');
+      setError(message);
+      showErrorToast(message);
       setStep('error');
     }
   };
 
   // Step 2 — Pay via Razorpay
   const pay = async () => {
+    if (step === 'paid' || !booking) return;
     try {
       const orderRes = await paymentAPI.createOrder({
         bookingId:  booking.id,
@@ -64,6 +72,7 @@ export default function Confirm() {
               razorpaySignature: response.razorpay_signature,
               bookingId: booking.id,
             });
+            showSuccessToast('Payment successful. Your seat is confirmed.');
             setStep('paid');
           },
           prefill: { name: user.name, email: user.email },
@@ -78,10 +87,13 @@ export default function Confirm() {
           razorpaySignature: '',
           bookingId: booking.id,
         });
+        showSuccessToast('Payment successful. Your seat is confirmed.');
         setStep('paid');
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Payment failed.');
+      const message = getApiErrorMessage(err, 'Payment failed.');
+      setError(message);
+      showErrorToast(message);
       setStep('error');
     }
   };
@@ -159,8 +171,8 @@ export default function Confirm() {
 
             {/* Payment breakdown */}
             <div className="bg-[#c8f135]/05 border border-[#c8f135]/15 rounded-xl p-4 mb-6">
-              <div className="flex justify-between text-sm mb-2"><span className="text-gray-400">Distance fare ({riderDist} km × ₹{ride.price_per_km})</span><span>₹{Math.round(riderDist * ride.price_per_km)}</span></div>
-              <div className="flex justify-between text-sm mb-3"><span className="text-gray-400">Platform fee</span><span>₹1</span></div>
+              <div className="flex justify-between text-sm mb-2"><span className="text-gray-400">Distance fare ({riderDist} km × ₹{ride.price_per_km})</span><span>₹{fareBreakdown.baseFare}</span></div>
+              <div className="flex justify-between text-sm mb-3"><span className="text-gray-400">Platform fee</span><span>₹{fareBreakdown.platformFee}</span></div>
               <div className="flex justify-between border-t border-[#c8f135]/15 pt-3">
                 <span className="font-semibold">Total</span>
                 <span className="text-[#c8f135] text-2xl font-bold">₹{fareAmount}</span>

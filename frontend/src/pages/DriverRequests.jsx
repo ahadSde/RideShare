@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api';
 import { parseServerDate } from '../utils/datetime';
+import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
 
 export default function DriverRequests() {
   const { rideId } = useParams();
@@ -33,25 +34,31 @@ export default function DriverRequests() {
   };
 
   const approve = async (bookingId) => {
+    if (processing) return;
     setProcessing(bookingId);
     try {
       await api.patch(`/rides/${rideId}/requests/${bookingId}/approve`);
       await fetchRequests();
+      showSuccessToast('Seat request approved.');
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to approve');
+      showErrorToast(getApiErrorMessage(err, 'Failed to approve'));
+    } finally {
+      setProcessing(null);
     }
-    setProcessing(null);
   };
 
   const reject = async (bookingId) => {
+    if (processing) return;
     setProcessing(bookingId);
     try {
       await api.patch(`/rides/${rideId}/requests/${bookingId}/reject`);
       await fetchRequests();
+      showSuccessToast('Seat request rejected.');
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to reject');
+      showErrorToast(getApiErrorMessage(err, 'Failed to reject'));
+    } finally {
+      setProcessing(null);
     }
-    setProcessing(null);
   };
 
   const statusColor = (s) => ({

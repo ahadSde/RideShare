@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { rideAPI } from '../api';
 import 'leaflet/dist/leaflet.css';
 import { calculateFare } from '../utils/fare';
+import { getApiErrorMessage, showErrorToast } from '../utils/toast';
 
 const ORS_KEY = import.meta.env.VITE_ORS_API_KEY || '';
 
@@ -121,14 +122,16 @@ export default function SearchRide() {
   };
 
   const searchRides = async () => {
-    if (!pickup || !drop) return;
+    if (loading || !pickup || !drop) return;
     setLoading(true); setSearched(true);
     try {
       const res = await rideAPI.search({ pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, date });
       setRides(res.data.rides || []);
       setStatus({ type: 'success', msg: `✅ Found ${res.data.rides?.length || 0} rides · ${res.data.source === 'cache' ? 'from cache ⚡' : 'from DB'}` });
-    } catch {
-      setStatus({ type: 'error', msg: 'Search failed. Try again.' });
+    } catch (err) {
+      const message = getApiErrorMessage(err, 'Search failed. Try again.');
+      setStatus({ type: 'error', msg: message });
+      showErrorToast(message);
     } finally { setLoading(false); }
   };
 

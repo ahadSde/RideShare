@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import useAuth from '../context/useAuth';
 import api from '../api';
 import { calculateFare } from '../utils/fare';
+import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
 
 export default function RideDetail() {
   const { rideId } = useParams();
@@ -24,8 +25,6 @@ export default function RideDetail() {
   const [posting,    setPosting]    = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [requested,  setRequested]  = useState(false);
-  const [error,      setError]      = useState('');
-  const [success,    setSuccess]    = useState('');
 
   // Determine if this is driver view
   // true if: URL has /comments OR user is a driver OR explicitly passed
@@ -57,36 +56,39 @@ export default function RideDetail() {
   };
 
   const postComment = async () => {
-    if (!newComment.trim()) return;
+    if (posting || !newComment.trim()) return;
     setPosting(true);
     try {
       await api.post(`/rides/${rideId}/comments`, { message: newComment });
       setNewComment('');
       await fetchComments();
+      showSuccessToast(isDriverView ? 'Note posted.' : 'Question posted.');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to post');
+      showErrorToast(getApiErrorMessage(err, 'Failed to post'));
+    } finally {
+      setPosting(false);
     }
-    setPosting(false);
   };
 
   const postReply = async (commentId) => {
-    if (!replyText.trim()) return;
+    if (posting || !replyText.trim()) return;
     setPosting(true);
     try {
       await api.post(`/rides/${rideId}/comments/${commentId}/reply`, { message: replyText });
       setReplyTo(null);
       setReplyText('');
       await fetchComments();
+      showSuccessToast('Reply posted.');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to reply');
+      showErrorToast(getApiErrorMessage(err, 'Failed to reply'));
+    } finally {
+      setPosting(false);
     }
-    setPosting(false);
   };
 
   const requestSeat = async () => {
-    if (!pickup || !drop) return;
+    if (requesting || !pickup || !drop) return;
     setRequesting(true);
-    setError('');
     try {
       await api.post(`/rides/${rideId}/request`, {
         pickupName: pickup.name,
@@ -97,12 +99,13 @@ export default function RideDetail() {
         dropLng:    drop.lng,
         distanceKm: riderDist,
       });
-      setSuccess("✅ Seat requested! Waiting for driver approval. You'll be notified via email.");
+      showSuccessToast("Seat requested. Waiting for driver approval.");
       setRequested(true);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to request seat');
+      showErrorToast(getApiErrorMessage(err, 'Failed to request seat'));
+    } finally {
+      setRequesting(false);
     }
-    setRequesting(false);
   };
 
   // Only calculate fare for rider
@@ -238,24 +241,6 @@ export default function RideDetail() {
                 <span className="font-semibold">You'll pay (after approval)</span>
                 <span className="text-[#c8f135] text-xl font-bold">₹{fareAmount}</span>
               </div>
-            </div>
-          )}
-
-          {/* Error */}
-          {error && (
-            <p className="text-red-400 text-sm bg-red-400/10 border border-red-400/20 rounded-lg px-4 py-2 mb-4">
-              {error}
-            </p>
-          )}
-
-          {/* Success + dashboard link */}
-          {success && (
-            <div className="bg-green-400/10 border border-green-400/20 rounded-lg px-4 py-3 mb-4">
-              <p className="text-green-400 text-sm mb-2">{success}</p>
-              {/* <button onClick={() => navigate('/dashboard')}
-                className="text-[#c8f135] text-sm font-medium hover:underline">
-                → Go to Dashboard to track your booking
-              </button> */}
             </div>
           )}
 

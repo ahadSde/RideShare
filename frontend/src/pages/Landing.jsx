@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuth from '../context/useAuth';
+import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
 
 export default function Landing() {
   const { login, register } = useAuth();
@@ -9,26 +10,28 @@ export default function Landing() {
   const [mode, setMode]     = useState('login');    // 'login' | 'register'
   const [role, setRole]     = useState('rider');
   const [form, setForm]     = useState({ name:'', email:'', password:'', phone:'' });
-  const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
 
   const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const submit = async () => {
-    setError(''); setLoading(true);
+    if (loading) return;
+    setLoading(true);
     try {
       if (mode === 'login') {
         const user = await login(form.email, form.password);
         console.log('Logged in user:', user);
         console.log('Token in storage:', localStorage.getItem('token'));
+        showSuccessToast(`Welcome back, ${user?.name || 'there'}!`);
         // Wait a moment before navigating
         setTimeout(() => navigate('/dashboard'), 500);
       } else {
         await register({ ...form, role });
+        showSuccessToast('Account created successfully.');
         setTimeout(() => navigate('/dashboard'), 500);
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Something went wrong');
+      showErrorToast(getApiErrorMessage(err, 'Something went wrong'));
     } finally {
       setLoading(false);
     }
@@ -112,8 +115,6 @@ export default function Landing() {
             <input name="password" type="password" value={form.password} onChange={handle} placeholder="••••••••"
               className="w-full bg-[#0e0f13] border border-[#2a2d3a] rounded-lg px-4 py-3 text-sm text-white placeholder-gray-600 focus:border-[#c8f135] outline-none"/>
           </div>
-
-          {error && <p className="text-red-400 text-sm mb-4 bg-red-400/10 border border-red-400/20 rounded-lg px-4 py-2">{error}</p>}
 
           <button onClick={submit} disabled={loading}
             className="w-full bg-[#c8f135] text-[#0e0f13] font-bold py-3 rounded-lg hover:shadow-[0_0_20px_rgba(200,241,53,0.3)] transition-all disabled:opacity-50">
