@@ -20,8 +20,6 @@ export default function Landing() {
     try {
       if (mode === 'login') {
         const user = await login(form.email, form.password);
-        console.log('Logged in user:', user);
-        console.log('Token in storage:', localStorage.getItem('token'));
         showSuccessToast(`Welcome back, ${user?.name || 'there'}!`);
         // Wait a moment before navigating
         setTimeout(() => navigate('/dashboard'), 500);

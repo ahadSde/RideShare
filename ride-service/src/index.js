@@ -41,7 +41,7 @@ const startPaymentTimeoutCron = () => {
         SET status = 'expired'
         WHERE status = 'approved'
         AND payment_deadline < NOW()
-        RETURNING *`
+        RETURNING id, ride_id, rider_id, rider_email`
       );
       if (expired.rows.length > 0) {
         console.log(`[Cron] Expired ${expired.rows.length} unpaid booking(s)`);
@@ -50,6 +50,7 @@ const startPaymentTimeoutCron = () => {
             bookingId: booking.id,
             rideId: booking.ride_id,
             riderId: booking.rider_id,
+            riderEmail: booking.rider_email,
           });
         }
       }
@@ -75,11 +76,22 @@ const startRideAutoStartCron = () => {
       if (started.rows.length > 0) {
         console.log(`[Cron] Auto-started ${started.rows.length} ride(s)`);
         for (const ride of started.rows) {
-          await publishEvent('ride.started', {
-            rideId: ride.id,
-            driverId: ride.driver_id,
-            startedAt: new Date().toISOString(),
-          });
+          const riderResult = await pool.query(
+            `SELECT rider_id, rider_email
+             FROM bookings
+             WHERE ride_id = $1 AND status = 'confirmed'`,
+            [ride.id]
+          );
+
+          for (const rider of riderResult.rows) {
+            await publishEvent('ride.started', {
+              rideId: ride.id,
+              driverId: ride.driver_id,
+              riderId: rider.rider_id,
+              riderEmail: rider.rider_email,
+              startedAt: new Date().toISOString(),
+            });
+          }
         }
       }
     } catch (err) {

@@ -24,11 +24,22 @@ const startRideAutoStart = () => {
       if (result.rows.length > 0) {
         console.log(`[Cron] Auto-started ${result.rows.length} ride(s)`);
         for (const ride of result.rows) {
-          await publishEvent('ride.started', {
-            rideId: ride.id,
-            driverId: ride.driver_id,
-            startedAt: new Date().toISOString(),
-          });
+          const riders = await pool.query(
+            `SELECT rider_id, rider_email
+             FROM bookings
+             WHERE ride_id = $1 AND status = 'confirmed'`,
+            [ride.id]
+          );
+
+          for (const rider of riders.rows) {
+            await publishEvent('ride.started', {
+              rideId: ride.id,
+              driverId: ride.driver_id,
+              riderId: rider.rider_id,
+              riderEmail: rider.rider_email,
+              startedAt: new Date().toISOString(),
+            });
+          }
         }
       }
     } catch (err) {
@@ -87,7 +98,7 @@ const startPaymentTimeoutHandler = () => {
          SET status = 'expired'
          WHERE status = 'approved'
            AND payment_deadline < NOW()
-         RETURNING ride_id, rider_id, id`
+         RETURNING ride_id, rider_id, rider_email, id`
       );
 
       for (const booking of expired.rows) {
@@ -97,6 +108,7 @@ const startPaymentTimeoutHandler = () => {
         await publishEvent('payment.timeout', {
           bookingId: booking.id,
           riderId:   booking.rider_id,
+          riderEmail: booking.rider_email,
           rideId:    booking.ride_id,
         });
 
@@ -131,6 +143,7 @@ const startPaymentTimeoutHandler = () => {
             bookingId:       nextBooking.id,
             rideId:          nextBooking.ride_id,
             riderId:         nextBooking.rider_id,
+            riderEmail:      nextBooking.rider_email,
             fareAmount:      nextBooking.fare_amount,
             paymentDeadline: paymentDeadline?.toISOString?.() || paymentDeadline,
             pickupName:      nextBooking.pickup_name,

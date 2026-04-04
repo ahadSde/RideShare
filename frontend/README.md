@@ -1,16 +1,62 @@
-# React + Vite
+# RideShare Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite frontend for the RideShare microservices project.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Rider and driver authentication
+- Driver ride posting with map-based route selection
+- Rider ride search with map-based pickup and drop selection
+- Real-road route rendering using OpenRouteService
+- Ride request, approval, payment, and booking tracking flows
+- Dashboard views for both riders and drivers
+- Toast notifications for user actions
 
-## React Compiler
+## Prerequisites
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Node.js 18+
+- API Gateway running at `http://localhost:3000`
+- OpenRouteService API key
 
-## Expanding the ESLint configuration
+## Environment Setup
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Create a `.env` file in the `frontend` folder:
+
+```env
+VITE_ORS_API_KEY=your_openrouteservice_api_key_here
+```
+
+## Install and Run
+
+```bash
+npm install
+npm run dev
+```
+
+The app starts on:
+
+```text
+http://localhost:5173
+```
+
+## Build
+
+```bash
+npm run build
+```
+
+## Key Pages
+
+- `/` Login / register
+- `/dashboard` User dashboard
+- `/post-ride` Driver ride posting
+- `/search` Rider ride search
+- `/ride/:rideId` Ride detail and seat request flow
+- `/ride/:rideId/requests` Driver approval queue
+- `/pay/:bookingId` Rider payment page
+
+## Notes
+
+- This frontend expects the backend services to be available through the API Gateway.
+- Real route rendering depends on a valid OpenRouteService key.
+- Payment works in demo mode when Razorpay test keys are not configured on the backend.

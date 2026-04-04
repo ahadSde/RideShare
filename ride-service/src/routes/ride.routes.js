@@ -49,17 +49,15 @@ router.post('/', [
   }
 
   try {
-    // Build PostGIS LineString from route coordinates if provided
-    let routePath = null;
+    let routePathWkt = null;
     if (routeCoords && routeCoords.length >= 2) {
-      const wkt = `LINESTRING(${routeCoords.map(c => `${c[0]} ${c[1]}`).join(',')})`;
-      routePath = `ST_GeogFromText('${wkt}')`;
+      routePathWkt = `LINESTRING(${routeCoords.map(c => `${c[0]} ${c[1]}`).join(',')})`;
     }
 
     const result = await pool.query(
       `INSERT INTO rides (
         driver_id, driver_email, from_name, to_name,
-        from_location, to_location,
+        from_location, to_location, route_path,
         distance_km, duration_min,
         seats_total, seats_available,
         price_per_km, departure_time, description
@@ -67,13 +65,15 @@ router.post('/', [
         $1, $2, $3, $4,
         ST_GeogFromText('POINT(' || $5::text || ' ' || $6::text || ')'),
         ST_GeogFromText('POINT(' || $7::text || ' ' || $8::text || ')'),
-        $9, $10, $11, $11, $12, $13, $14
+        CASE WHEN $9::text IS NOT NULL THEN ST_GeogFromText($9) ELSE NULL END,
+        $10, $11, $12, $12, $13, $14, $15
       ) RETURNING *`,
       [
         driverId, req.user.email,
         fromName, toName,
         fromLng, fromLat,
         toLng, toLat,
+        routePathWkt,
         distanceKm, durationMin,
         seats, pricePerKm,
         parsedDepartureTime.toISOString(), description || null
@@ -332,14 +332,25 @@ router.patch('/:rideId/start', async (req, res) => {
       return res.status(404).json({ error: 'Ride not found or not authorized' });
     }
 
-    // Notify all booked riders via Kafka
-    await publishEvent('ride.started', {
-      rideId,
-      driverId,
-      startedAt: new Date().toISOString(),
-    });
+    const ride = result.rows[0];
+    const riderResult = await pool.query(
+      `SELECT rider_id, rider_email
+       FROM bookings
+       WHERE ride_id = $1 AND status = 'confirmed'`,
+      [rideId]
+    );
 
-    res.json({ message: 'Ride started', ride: result.rows[0] });
+    for (const rider of riderResult.rows) {
+      await publishEvent('ride.started', {
+        rideId,
+        driverId,
+        riderId: rider.rider_id,
+        riderEmail: rider.rider_email,
+        startedAt: new Date().toISOString(),
+      });
+    }
+
+    res.json({ message: 'Ride started', ride });
   } catch (err) {
     console.error('[StartRide]', err.message);
     res.status(500).json({ error: 'Failed to start ride' });
