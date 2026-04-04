@@ -13,6 +13,8 @@ export default function SearchRide() {
   const mapObj    = useRef(null);
   const markersRef = useRef({ pickup: null, drop: null });
   const routeRef  = useRef(null);
+  const geocodeControllers = useRef({ pickup: null, drop: null });
+  const geocodeTimers = useRef({ pickup: null, drop: null });
 
   const [pickup, setPickup] = useState(null);
   const [drop,   setDrop]   = useState(null);
@@ -37,6 +39,11 @@ export default function SearchRide() {
       mapObj.current = { map, L: L.default };
     });
     setDate(new Date().toISOString().split('T')[0]);
+
+    return () => {
+      Object.values(geocodeControllers.current).forEach(controller => controller?.abort());
+      Object.values(geocodeTimers.current).forEach(timer => timer && clearTimeout(timer));
+    };
   }, []);
 
   const makeIcon = (L, color) => L.divIcon({
@@ -115,10 +122,42 @@ export default function SearchRide() {
     }
   };
 
-  const geocode = async (q, setSuggs) => {
-    if (q.length < 3) return setSuggs([]);
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&countrycodes=in`);
-    setSuggs(await res.json());
+  const geocode = (q, type, setSuggs) => {
+    if (geocodeTimers.current[type]) {
+      clearTimeout(geocodeTimers.current[type]);
+    }
+
+    if (geocodeControllers.current[type]) {
+      geocodeControllers.current[type].abort();
+      geocodeControllers.current[type] = null;
+    }
+
+    if (q.length < 3) {
+      setSuggs([]);
+      return;
+    }
+
+    geocodeTimers.current[type] = setTimeout(async () => {
+      const controller = new AbortController();
+      geocodeControllers.current[type] = controller;
+
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&countrycodes=in`,
+          { signal: controller.signal }
+        );
+        if (!res.ok) throw new Error(`Geocode request failed: ${res.status}`);
+        setSuggs(await res.json());
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          setSuggs([]);
+        }
+      } finally {
+        if (geocodeControllers.current[type] === controller) {
+          geocodeControllers.current[type] = null;
+        }
+      }
+    }, 350);
   };
 
   const searchRides = async () => {
@@ -168,7 +207,7 @@ export default function SearchRide() {
             <div className="text-xs text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-[#c8f135]"></span> Your Pickup
             </div>
-            <input value={pickupSearch} onChange={e => { setPickupSearch(e.target.value); geocode(e.target.value, setPickupSuggs); }}
+            <input value={pickupSearch} onChange={e => { setPickupSearch(e.target.value); geocode(e.target.value, 'pickup', setPickupSuggs); }}
               placeholder="Where are you starting?"
               className="w-full bg-[#0e0f13] border border-[#2a2d3a] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:border-[#c8f135] outline-none"/>
             {pickupSuggs.length > 0 && (
@@ -189,7 +228,7 @@ export default function SearchRide() {
             <div className="text-xs text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span> Your Drop
             </div>
-            <input value={dropSearch} onChange={e => { setDropSearch(e.target.value); geocode(e.target.value, setDropSuggs); }}
+            <input value={dropSearch} onChange={e => { setDropSearch(e.target.value); geocode(e.target.value, 'drop', setDropSuggs); }}
               placeholder="Where are you going?"
               className="w-full bg-[#0e0f13] border border-[#2a2d3a] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:border-[#c8f135] outline-none"/>
             {dropSuggs.length > 0 && (
