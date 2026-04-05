@@ -3,6 +3,7 @@ const router  = express.Router();
 const pool    = require('../db');
 const { publishEvent } = require('../kafka/producer');
 const { normalizeBookingDeadline } = require('../utils/datetime');
+const appTimeZone = process.env.APP_TIMEZONE || 'Asia/Kolkata';
 
 // ─────────────────────────────────────
 // POST /bookings/request/:rideId
@@ -305,9 +306,9 @@ router.get('/my', async (req, res) => {
          JOIN rides r ON b.ride_id = r.id
          WHERE b.rider_id = $1
            AND b.status IN ('requested', 'approved', 'payment_pending', 'confirmed')
-           AND r.departure_time > NOW()
+           AND r.departure_time > TIMEZONE($2, NOW())
          ORDER BY r.departure_time ASC`,
-        [req.user.id]
+        [req.user.id, appTimeZone]
       );
     } else {
       // Driver — active and in_progress rides by default

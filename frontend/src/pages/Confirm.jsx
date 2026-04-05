@@ -4,6 +4,7 @@ import useAuth from '../context/useAuth';
 import { rideAPI, paymentAPI } from '../api';
 import { calculateFare } from '../utils/fare';
 import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
+import { formatServerDateTime } from '../utils/datetime';
 
 export default function Confirm() {
   const { bookingId } = useParams();
@@ -157,7 +158,7 @@ export default function Confirm() {
               {[
                 ['From',      pickup?.name?.split(',')[0]],
                 ['To',        drop?.name?.split(',')[0]],
-                ['Departure', new Date(ride.departure_time).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })],
+                ['Departure', formatServerDateTime(ride.departure_time, 'en-IN', { dateStyle:'medium', timeStyle:'short' })],
                 ['Distance',  `${riderDist} km`],
                 ['Seats Left',`${ride.seats_available}`],
                 ['Fare Rate', `₹${ride.price_per_km}/km`],

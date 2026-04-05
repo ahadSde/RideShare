@@ -7,6 +7,11 @@ const { publishEvent } = require('../kafka/producer');
 const { normalizeBookingDeadline } = require('../utils/datetime');
 
 const router = express.Router();
+const padTimestamp = (value) => String(value).padStart(2, '0');
+const formatTimestampForDb = (date) => {
+  const milliseconds = String(date.getMilliseconds()).padStart(3, '0');
+  return `${date.getFullYear()}-${padTimestamp(date.getMonth() + 1)}-${padTimestamp(date.getDate())} ${padTimestamp(date.getHours())}:${padTimestamp(date.getMinutes())}:${padTimestamp(date.getSeconds())}.${milliseconds}`;
+};
 
 // ─────────────────────────────────────
 // POST /rides — Driver posts a new ride
@@ -76,7 +81,7 @@ router.post('/', [
         routePathWkt,
         distanceKm, durationMin,
         seats, pricePerKm,
-        parsedDepartureTime.toISOString(), description || null
+        formatTimestampForDb(parsedDepartureTime), description || null
       ]
     );
 

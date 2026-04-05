@@ -1,6 +1,7 @@
 const pool = require('./db');
 const { publishEvent } = require('./kafka/producer');
 const { normalizeUtcTimestamp } = require('./utils/datetime');
+const appTimeZone = process.env.APP_TIMEZONE || 'Asia/Kolkata';
 
 // ─────────────────────────────────────
 // Auto-start rides
@@ -16,9 +17,10 @@ const startRideAutoStart = () => {
         `UPDATE rides
          SET status = 'in_progress'
          WHERE status = 'active'
-           AND departure_time <= NOW()
-           AND departure_time + (duration_min * interval '1 minute') > NOW()
-         RETURNING id, driver_id`
+           AND departure_time <= TIMEZONE($1, NOW())
+           AND departure_time + (duration_min * interval '1 minute') > TIMEZONE($1, NOW())
+         RETURNING id, driver_id`,
+        [appTimeZone]
       );
 
       if (result.rows.length > 0) {
@@ -62,8 +64,9 @@ const startRideAutoComplete = () => {
         `UPDATE rides
          SET status = 'completed'
          WHERE status IN ('active', 'in_progress')
-           AND departure_time + (duration_min * interval '1 minute') < NOW()
-         RETURNING id, driver_id`
+           AND departure_time + (duration_min * interval '1 minute') < TIMEZONE($1, NOW())
+         RETURNING id, driver_id`,
+        [appTimeZone]
       );
 
       if (result.rows.length > 0) {

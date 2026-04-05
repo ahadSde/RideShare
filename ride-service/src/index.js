@@ -7,6 +7,7 @@ const { connectProducer, publishEvent } = require('./kafka/producer');
 const rideRoutes    = require('./routes/ride.routes');
 const requestRoutes = require('./routes/request.routes');
 const commentRoutes = require('./routes/comment.routes');
+const appTimeZone = process.env.APP_TIMEZONE || 'Asia/Kolkata';
 
 const authenticate = (req, res, next) => {
   try {
@@ -68,9 +69,10 @@ const startRideAutoStartCron = () => {
         `UPDATE rides
          SET status = 'in_progress'
          WHERE status = 'active'
-           AND departure_time <= NOW()
-           AND (departure_time + (duration_min * interval '1 minute')) > NOW()
-         RETURNING *`
+           AND departure_time <= TIMEZONE($1, NOW())
+           AND (departure_time + (duration_min * interval '1 minute')) > TIMEZONE($1, NOW())
+         RETURNING *`,
+        [appTimeZone]
       );
 
       if (started.rows.length > 0) {
@@ -107,8 +109,9 @@ const startRideAutoCompleteCron = () => {
       const completed = await pool.query(
         `UPDATE rides SET status = 'completed'
          WHERE status IN ('active', 'in_progress')
-         AND (departure_time + (duration_min * interval '1 minute')) < NOW()
-         RETURNING *`
+         AND (departure_time + (duration_min * interval '1 minute')) < TIMEZONE($1, NOW())
+         RETURNING *`,
+        [appTimeZone]
       );
       if (completed.rows.length > 0) {
         console.log(`[Cron] Auto-completed ${completed.rows.length} ride(s)`);

@@ -4,6 +4,7 @@ import { rideAPI } from '../api';
 import 'leaflet/dist/leaflet.css';
 import { calculateFare } from '../utils/fare';
 import { getApiErrorMessage, showErrorToast } from '../utils/toast';
+import { formatServerTime, getLocalDateInputValue } from '../utils/datetime';
 
 const ORS_KEY = import.meta.env.VITE_ORS_API_KEY || '';
 
@@ -38,7 +39,7 @@ export default function SearchRide() {
       map.on('click', e => handleMapClick(e.latlng, L.default));
       mapObj.current = { map, L: L.default };
     });
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(getLocalDateInputValue());
 
     return () => {
       Object.values(geocodeControllers.current).forEach(controller => controller?.abort());
@@ -291,7 +292,7 @@ export default function SearchRide() {
                       <div className="text-gray-500 text-xs flex gap-3">
                         <span>🪑 {ride.seats_available} seats</span>
                         <span>📍 {ride.distance_km} km</span>
-                        <span>🕐 {new Date(ride.departure_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span>🕐 {formatServerTime(ride.departure_time)}</span>
                       </div>
                     </div>
                     );

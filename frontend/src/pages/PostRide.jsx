@@ -3,16 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { rideAPI } from '../api';
 import 'leaflet/dist/leaflet.css';
 import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
+import { getLocalDateInputValue, getLocalTimeInputValue } from '../utils/datetime';
 
 const ORS_KEY = import.meta.env.VITE_ORS_API_KEY || '';
-
-const pad = (value) => String(value).padStart(2, '0');
-
-const getDateInputValue = (date = new Date()) =>
-  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-
-const getTimeInputValue = (date = new Date()) =>
-  `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 
 export default function PostRide() {
   const navigate = useNavigate();
@@ -50,7 +43,7 @@ export default function PostRide() {
       mapObj.current = { map, L: L.default };
     });
     const now = new Date();
-    setForm(f => ({ ...f, date: getDateInputValue(now), time: getTimeInputValue(now) }));
+    setForm(f => ({ ...f, date: getLocalDateInputValue(now), time: getLocalTimeInputValue(now) }));
 
     return () => {
       Object.values(geocodeControllers.current).forEach(controller => controller?.abort());
@@ -58,8 +51,8 @@ export default function PostRide() {
     };
   }, []);
 
-  const today = getDateInputValue();
-  const currentTime = getTimeInputValue();
+  const today = getLocalDateInputValue();
+  const currentTime = getLocalTimeInputValue();
   const minTime = form.date === today ? currentTime : undefined;
 
   const makeIcon = (L, color) => L.divIcon({
@@ -183,7 +176,7 @@ export default function PostRide() {
   const postRide = async () => {
     if (loading || !pickup || !drop || !routeInfo) return;
 
-    const departureAt = new Date(`${form.date}T${form.time}:00+05:30`);
+    const departureAt = new Date(`${form.date}T${form.time}:00`);
     if (Number.isNaN(departureAt.getTime()) || departureAt.getTime() <= Date.now()) {
       setStatus({ type: 'error', msg: 'Please choose a future departure date and time.' });
       showErrorToast('Please choose a future departure date and time.');
@@ -200,7 +193,7 @@ export default function PostRide() {
         distanceKm: routeInfo.distKm,
         durationMin: routeInfo.durMin,
         seats: parseInt(form.seats),
-        departureTime: `${form.date}T${form.time}:00+05:30`,
+        departureTime: `${form.date}T${form.time}:00`,
         fuelPrice: parseFloat(form.fuelPrice),
         mileage: parseFloat(form.mileage),
         description: form.description || '',

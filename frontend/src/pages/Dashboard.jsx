@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuth from '../context/useAuth';
 import { rideAPI } from '../api';
+import { formatServerDate, parseServerDate } from '../utils/datetime';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -19,7 +20,10 @@ export default function Dashboard() {
       // For rider — show all active bookings + recent rejected/expired
       const isActive = ['requested', 'approved', 'payment_pending', 'confirmed'].includes(ride.status);
       const isRecentlyRejected = ['rejected', 'expired'].includes(ride.status) &&
-        (Date.now() - new Date(ride.created_at)) < 24 * 60 * 60 * 1000;
+        (() => {
+          const createdAt = parseServerDate(ride.created_at);
+          return createdAt && (Date.now() - createdAt.getTime()) < 24 * 60 * 60 * 1000;
+        })();
       return isActive || isRecentlyRejected;
     }
   });
@@ -144,13 +148,13 @@ export default function Dashboard() {
                 <div key={i} className="py-4 flex items-center justify-between hover:bg-[#1e2029] rounded-xl px-3 -mx-3 transition-all">
                   <div>
                     <div className="font-medium text-sm flex items-center gap-2">
-                      {ride.from_name?.split(',')[0]}
+                      {(user?.role === 'rider' ? ride.pickup_name : ride.from_name)?.split(',')[0]}
                       <span className="text-[#c8f135]">→</span>
-                      {ride.to_name?.split(',')[0]}
+                      {(user?.role === 'rider' ? ride.drop_name : ride.to_name)?.split(',')[0]}
                     </div>
                     <div className="text-gray-500 text-xs mt-1">
                       {ride.distance_km} km ·{' '}
-                      {new Date(ride.departure_time || ride.created_at).toLocaleDateString('en-IN')}
+                      {formatServerDate(ride.departure_time || ride.created_at)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -171,16 +175,23 @@ export default function Dashboard() {
                         </button>
                       </>
                     )}
-                    {user?.role === 'rider' && ride.status === 'rejected' && (
-                      <span className="text-xs text-red-400">❌ Driver rejected your request</span>
-                    )}
-                    {user?.role === 'rider' && ride.status === 'expired' && (
-                      <span className="text-xs text-gray-400">⏰ Payment window expired</span>
+                    {user?.role === 'rider' && (
+                      <button
+                        onClick={() => navigate(`/ride/${ride.ride_id || ride.id}`, {
+                          state: {
+                            ride,
+                            existingBookingStatus: ride.status,
+                            fromBookingHistory: true,
+                          },
+                        })}
+                        className="text-xs text-gray-500 hover:text-[#c8f135] border border-[#2a2d3a] px-2 py-1 rounded-lg transition-all">
+                        💬 Q&A
+                      </button>
                     )}
                     {user?.role === 'rider' && ride.status === 'approved' && (
                       <button
-                        onClick={(e) => { 
-                          e.stopPropagation(); 
+                        onClick={(e) => {
+                          e.stopPropagation();
                           navigate(`/pay/${ride.id}`);
                         }}
                         className="bg-[#c8f135] text-[#0e0f13] text-xs font-bold px-3 py-1.5 rounded-lg animate-pulse">

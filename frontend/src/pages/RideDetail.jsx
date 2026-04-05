@@ -4,6 +4,7 @@ import useAuth from '../context/useAuth';
 import api from '../api';
 import { calculateFare } from '../utils/fare';
 import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
+import { formatServerDate, formatServerDateTime, parseServerDate } from '../utils/datetime';
 
 export default function RideDetail() {
   const { rideId } = useParams();
@@ -16,6 +17,7 @@ export default function RideDetail() {
   const pickup        = state?.pickup;
   const drop          = state?.drop;
   const riderDist     = state?.riderDist || 0;
+  const existingBookingStatus = state?.existingBookingStatus || null;
 
   const [ride,       setRide]       = useState(rideFromState || null);
   const [comments,   setComments]   = useState([]);
@@ -32,6 +34,11 @@ export default function RideDetail() {
     state?.isDriverView ||
     location.pathname.includes('/comments') ||
     user?.role === 'driver'
+  );
+  const isBookingContextView = !!(
+    !isDriverView &&
+    state?.fromBookingHistory &&
+    existingBookingStatus
   );
 
   useEffect(() => {
@@ -114,21 +121,53 @@ export default function RideDetail() {
     ? calculateFare(riderDist, pricePerKm)
     : { baseFare: 0, platformFee: 1, totalFare: 0 };
   const fareAmount = fareBreakdown.totalFare;
+  const bookingStatusMessage = existingBookingStatus ? ({
+    requested: {
+      text: '⏳ Request sent. Waiting for driver approval.',
+      className: 'bg-blue-500/10 border border-blue-500/20 text-blue-300',
+    },
+    approved: {
+      text: '✅ Request approved. Complete payment from your dashboard.',
+      className: 'bg-[#c8f135]/10 border border-[#c8f135]/20 text-[#c8f135]',
+    },
+    payment_pending: {
+      text: '💳 Payment pending.',
+      className: 'bg-orange-500/10 border border-orange-500/20 text-orange-300',
+    },
+    confirmed: {
+      text: '🎉 Your seat is confirmed.',
+      className: 'bg-green-500/10 border border-green-500/20 text-green-300',
+    },
+    rejected: {
+      text: '❌ Driver rejected your request.',
+      className: 'bg-red-500/10 border border-red-500/20 text-red-300',
+    },
+    expired: {
+      text: '⏰ Payment window expired.',
+      className: 'bg-gray-500/10 border border-gray-500/20 text-gray-300',
+    },
+    cancelled: {
+      text: '🚫 Ride was cancelled.',
+      className: 'bg-red-500/10 border border-red-500/20 text-red-300',
+    },
+    completed: {
+      text: '🏁 Ride completed.',
+      className: 'bg-green-500/10 border border-green-500/20 text-green-300',
+    },
+  }[existingBookingStatus] || null) : null;
 
   const formatDateTime = (dt) => {
-    if (!dt) return '—';
-    return new Date(dt).toLocaleString('en-IN', {
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', hour12: true,
-    });
+    return formatServerDateTime(dt);
   };
 
   const timeAgo = (date) => {
-    const diff = (Date.now() - new Date(date)) / 1000;
+    const parsedDate = parseServerDate(date);
+    if (!parsedDate) return '—';
+    const diff = (Date.now() - parsedDate.getTime()) / 1000;
     if (diff < 60) return 'just now';
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return new Date(date).toLocaleDateString('en-IN');
+    return formatServerDate(parsedDate);
   };
 
   if (!ride) return (
@@ -172,12 +211,12 @@ export default function RideDetail() {
               {ride.from_name?.split(',')[0]} → {ride.to_name?.split(',')[0]}
             </h2>
             {/* Show fare only for riders */}
-            {!isDriverView && fareAmount > 0 && (
+            {!isDriverView && !isBookingContextView && fareAmount > 0 && (
               <span className="text-[#c8f135] text-2xl font-bold">₹{fareAmount}</span>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className={`grid gap-3 mb-4 ${isBookingContextView ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <div className="bg-[#0e0f13] rounded-xl p-3">
               <div className="text-xs text-gray-500 mb-1">📍 From</div>
               <div className="text-sm font-medium">{ride.from_name?.split(',')[0]}</div>
@@ -190,17 +229,21 @@ export default function RideDetail() {
               <div className="text-xs text-gray-500 mb-1">📅 Departure</div>
               <div className="text-sm font-medium">{formatDateTime(ride.departure_time)}</div>
             </div>
-            <div className="bg-[#0e0f13] rounded-xl p-3">
-              <div className="text-xs text-gray-500 mb-1">💺 Seats left</div>
-              <div className="text-sm font-medium">{ride.seats_available}</div>
-            </div>
-            <div className="bg-[#0e0f13] rounded-xl p-3">
-              <div className="text-xs text-gray-500 mb-1">⛽ Fare rate</div>
-              <div className="text-sm font-medium">₹{ride.price_per_km}/km</div>
-            </div>
+            {!isBookingContextView && (
+              <div className="bg-[#0e0f13] rounded-xl p-3">
+                <div className="text-xs text-gray-500 mb-1">💺 Seats left</div>
+                <div className="text-sm font-medium">{ride.seats_available}</div>
+              </div>
+            )}
+            {!isBookingContextView && (
+              <div className="bg-[#0e0f13] rounded-xl p-3">
+                <div className="text-xs text-gray-500 mb-1">⛽ Fare rate</div>
+                <div className="text-sm font-medium">₹{ride.price_per_km}/km</div>
+              </div>
+            )}
 
             {/* Rider sees their trip distance only */}
-            {!isDriverView && riderDist > 0 && (
+            {!isDriverView && !isBookingContextView && riderDist > 0 && (
               <div className="bg-[#0e0f13] rounded-xl p-3">
                 <div className="text-xs text-gray-500 mb-1">📏 Your distance</div>
                 <div className="text-sm font-medium">{riderDist} km</div>
@@ -225,7 +268,7 @@ export default function RideDetail() {
           )}
 
           {/* Fare breakdown — RIDER ONLY */}
-          {!isDriverView && riderDist > 0 && fareAmount > 0 && (
+          {!isDriverView && !isBookingContextView && riderDist > 0 && fareAmount > 0 && (
             <div className="bg-[#c8f135]/05 border border-[#c8f135]/15 rounded-xl p-4 mb-5">
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-gray-400">
@@ -245,7 +288,7 @@ export default function RideDetail() {
           )}
 
           {/* Request button — RIDER ONLY */}
-          {!isDriverView && !requested && (
+          {!isDriverView && !requested && !isBookingContextView && (
             <>
               <button onClick={requestSeat} disabled={requesting}
                 className="w-full bg-[#c8f135] text-[#0e0f13] font-bold py-3.5 rounded-xl hover:shadow-[0_0_20px_rgba(200,241,53,0.3)] transition-all disabled:opacity-50">
@@ -264,6 +307,13 @@ export default function RideDetail() {
               → Go to Dashboard
             </button>
           )}
+
+          {isBookingContextView && bookingStatusMessage && (
+            <div className={`rounded-xl px-4 py-3 text-sm ${bookingStatusMessage.className}`}>
+              {bookingStatusMessage.text}
+            </div>
+          )}
+
         </div>
 
         {/* Comments Section */}
