@@ -58,6 +58,8 @@ app.post('/payment/create-order', async (req, res) => {
 
   try {
     let razorpayOrderId = `mock_order_${Date.now()}`;
+    let checkoutKeyId = null;
+    const receipt = `booking_${String(bookingId).replace(/-/g, '').slice(0, 24)}`;
 
     // Only create real Razorpay order if initialized
     if (razorpay) {
@@ -65,11 +67,15 @@ app.post('/payment/create-order', async (req, res) => {
         const order = await razorpay.orders.create({
           amount: Math.round(amount * 100),
           currency: 'INR',
-          receipt: `booking_${bookingId}`,
+          receipt,
         });
         razorpayOrderId = order.id;
+        checkoutKeyId = process.env.RAZORPAY_KEY_ID;
       } catch (err) {
-        console.log('[Razorpay] Order creation failed, using mock:', err.message);
+        console.log(
+          '[Razorpay] Order creation failed, using mock:',
+          err?.error?.description || err?.message || err
+        );
       }
     }
 
@@ -86,8 +92,9 @@ app.post('/payment/create-order', async (req, res) => {
       razorpayOrderId,
       amount,
       currency: 'INR',
-      // Return this to the frontend to open the Razorpay checkout widget
-      keyId: process.env.RAZORPAY_KEY_ID,
+      mode: checkoutKeyId ? 'razorpay' : 'mock',
+      // Only return keyId when a real Razorpay order was successfully created
+      keyId: checkoutKeyId,
     });
   } catch (err) {
     console.error('[CreateOrder]', err.message);

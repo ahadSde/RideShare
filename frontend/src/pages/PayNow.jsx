@@ -68,9 +68,9 @@ export default function PayNow() {
         amount: booking.fare_amount,
       });
 
-      const { razorpayOrderId, keyId } = orderRes.data;
+      const { razorpayOrderId, keyId, mode } = orderRes.data;
 
-      if (keyId && keyId !== 'rzp_test_REPLACE_ME' && window.Razorpay) {
+      if (mode === 'razorpay' && keyId && keyId !== 'rzp_test_REPLACE_ME' && window.Razorpay) {
         const rzp = new window.Razorpay({
           key: keyId,
           amount: booking.fare_amount * 100,
@@ -88,8 +88,22 @@ export default function PayNow() {
             showSuccessToast('Payment successful. Your seat is confirmed.');
             setPaid(true);
           },
+          modal: {
+            ondismiss: () => {
+              setPaying(false);
+              const message = 'Payment was cancelled before completion.';
+              setError(message);
+              showErrorToast(message);
+            },
+          },
           prefill: { name: user.name, email: user.email },
           theme: { color: '#c8f135' },
+        });
+        rzp.on('payment.failed', (response) => {
+          setPaying(false);
+          const message = response?.error?.description || 'Payment failed';
+          setError(message);
+          showErrorToast(message);
         });
         rzp.open();
       } else {
