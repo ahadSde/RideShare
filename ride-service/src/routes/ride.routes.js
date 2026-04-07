@@ -378,7 +378,7 @@ router.get('/my', async (req, res) => {
     } else {
       result = await pool.query(
         `SELECT b.*, r.from_name, r.to_name, 
-                r.departure_time, r.driver_id,
+                r.departure_time, r.driver_id, r.status AS ride_status,
                 r.price_per_km, r.distance_km as route_distance
          FROM bookings b
          JOIN rides r ON b.ride_id = r.id

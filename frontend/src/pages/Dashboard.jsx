@@ -17,14 +17,15 @@ export default function Dashboard() {
       return ['active', 'in_progress'].includes(ride.status);
     } else {
       if (showAll) return true;
-      // For rider — show all active bookings + recent rejected/expired
-      const isActive = ['requested', 'approved', 'payment_pending', 'confirmed'].includes(ride.status);
+      // For rider — show open bookings only while the ride itself is current.
+      const isOpenBooking = ['requested', 'approved', 'payment_pending', 'confirmed'].includes(ride.status);
+      const isCurrentRide = ['active', 'in_progress'].includes(ride.ride_status);
       const isRecentlyRejected = ['rejected', 'expired'].includes(ride.status) &&
         (() => {
           const createdAt = parseServerDate(ride.created_at);
           return createdAt && (Date.now() - createdAt.getTime()) < 24 * 60 * 60 * 1000;
         })();
-      return isActive || isRecentlyRejected;
+      return (isOpenBooking && isCurrentRide) || isRecentlyRejected;
     }
   });
 
