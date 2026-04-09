@@ -96,6 +96,21 @@ CREATE TABLE IF NOT EXISTS ride_comments (
   created_at  TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS ratings (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  booking_id     UUID NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+  ride_id        UUID NOT NULL REFERENCES rides(id) ON DELETE CASCADE,
+  from_user_id   UUID NOT NULL,
+  from_user_name VARCHAR(100) NOT NULL,
+  from_user_role VARCHAR(10) NOT NULL CHECK (from_user_role IN ('driver', 'rider')),
+  to_user_id     UUID NOT NULL,
+  to_user_role   VARCHAR(10) NOT NULL CHECK (to_user_role IN ('driver', 'rider')),
+  score          INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+  review_text    TEXT,
+  created_at     TIMESTAMP DEFAULT NOW(),
+  UNIQUE (booking_id, from_user_id, to_user_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_rides_from ON rides USING GIST (from_location);
 CREATE INDEX IF NOT EXISTS idx_rides_to ON rides USING GIST (to_location);
 CREATE INDEX IF NOT EXISTS idx_rides_route ON rides USING GIST (route_path);
@@ -110,6 +125,8 @@ CREATE INDEX IF NOT EXISTS idx_bookings_payment_deadline ON bookings(payment_dea
 
 CREATE INDEX IF NOT EXISTS idx_comments_ride ON ride_comments(ride_id);
 CREATE INDEX IF NOT EXISTS idx_comments_parent ON ride_comments(parent_id);
+CREATE INDEX IF NOT EXISTS idx_ratings_target ON ratings(to_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ratings_booking ON ratings(booking_id);
 
 -- ─────────────────────────────────────
 -- Fare Service DB

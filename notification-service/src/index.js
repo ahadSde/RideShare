@@ -239,10 +239,6 @@ const run = async () => {
     eachMessage: async ({ topic, message }) => {
       try {
         const data = JSON.parse(message.value.toString());
-        console.log(`[Kafka] Received "${topic}"`, {
-          to: data.riderEmail || data.driverEmail || 'unknown',
-        });
-
         const templateFn = templates[topic];
         if (!templateFn) {
           console.log(`[Kafka] No template for: ${topic}`);
@@ -250,6 +246,13 @@ const run = async () => {
         }
 
         const { to, subject, html } = templateFn(data);
+        console.log(`[Kafka] Received "${topic}"`, {
+          to: to || 'none',
+        });
+        if (!to) {
+          console.log(`[Kafka] No email delivery needed for "${topic}"`);
+          return;
+        }
         await sendEmail(to, subject, html);
 
       } catch (err) {

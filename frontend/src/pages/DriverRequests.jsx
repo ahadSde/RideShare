@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api';
 import { parseServerDate } from '../utils/datetime';
 import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
+import UserReviewsModal from '../components/UserReviewsModal';
+import SubmitRatingModal from '../components/SubmitRatingModal';
 
 export default function DriverRequests() {
   const { rideId } = useParams();
@@ -11,6 +13,9 @@ export default function DriverRequests() {
   const [ride, setRide] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(null);
+  const [reviewSummaries, setReviewSummaries] = useState({});
+  const [reviewsTarget, setReviewsTarget] = useState(null);
+  const [ratingTarget, setRatingTarget] = useState(null);
 
   useEffect(() => { fetchRequests(); }, [rideId]);
 
@@ -23,6 +28,18 @@ export default function DriverRequests() {
       ]);
       setRequests(reqRes.data.requests || []);
       setRide(rideRes.data.ride);
+      const uniqueRiderIds = [...new Set((reqRes.data.requests || []).map((req) => req.rider_id).filter(Boolean))];
+      const summaries = await Promise.all(
+        uniqueRiderIds.map(async (userId) => {
+          try {
+            const res = await api.get(`/rides/users/${userId}/reviews/summary`);
+            return [userId, res.data.summary];
+          } catch {
+            return [userId, { averageRating: 0, totalReviews: 0 }];
+          }
+        })
+      );
+      setReviewSummaries(Object.fromEntries(summaries));
     } catch (err) {
       // If ride detail endpoint not available, just fetch requests
       try {
@@ -139,6 +156,21 @@ export default function DriverRequests() {
                   </div>
                 </div>
 
+                <div className="bg-[#0e0f13] rounded-xl p-3 mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs text-gray-500 mb-1">⭐ Rider reviews</div>
+                    <div className="text-sm font-medium">
+                      {reviewSummaries[req.rider_id]?.averageRating || 0} / 5
+                      <span className="text-gray-500 font-normal"> · {reviewSummaries[req.rider_id]?.totalReviews || 0} review{(reviewSummaries[req.rider_id]?.totalReviews || 0) === 1 ? '' : 's'}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setReviewsTarget({ userId: req.rider_id, label: `${req.rider_name || 'Rider'}'s Reviews` })}
+                    className="border border-[#2a2d3a] text-gray-300 hover:text-white hover:border-[#c8f135] px-3 py-2 rounded-lg text-sm transition-all">
+                    View reviews
+                  </button>
+                </div>
+
                 {/* Payment deadline timer */}
                 {req.status === 'approved' && req.payment_deadline && (
                   <div className="bg-[#c8f135]/10 border border-[#c8f135]/20 rounded-xl px-4 py-2 mb-4 text-sm text-[#c8f135]">
@@ -165,8 +197,22 @@ export default function DriverRequests() {
                 )}
 
                 {req.status === 'confirmed' && (
-                  <div className="text-center text-green-400 text-sm font-medium py-2">
-                    ✅ Payment confirmed — seat booked!
+                  <div className="space-y-3">
+                    <div className="text-center text-green-400 text-sm font-medium py-2">
+                      ✅ Payment confirmed — seat booked!
+                    </div>
+                    {ride?.status === 'completed' && !req.my_rating_id && (
+                      <button
+                        onClick={() => setRatingTarget({ bookingId: req.id, label: req.rider_name || 'this rider' })}
+                        className="w-full border border-[#c8f135]/30 text-[#c8f135] font-bold py-2.5 rounded-xl text-sm">
+                        ⭐ Rate Rider
+                      </button>
+                    )}
+                    {ride?.status === 'completed' && req.my_rating_id && (
+                      <div className="text-center text-xs text-[#c8f135]">
+                        You rated this rider {req.my_rating_score}★
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -174,6 +220,19 @@ export default function DriverRequests() {
           </div>
         )}
       </div>
+      <UserReviewsModal
+        open={!!reviewsTarget}
+        onClose={() => setReviewsTarget(null)}
+        userId={reviewsTarget?.userId}
+        title={reviewsTarget?.label}
+      />
+      <SubmitRatingModal
+        open={!!ratingTarget}
+        onClose={() => setRatingTarget(null)}
+        bookingId={ratingTarget?.bookingId}
+        targetLabel={ratingTarget?.label}
+        onSubmitted={fetchRequests}
+      />
     </div>
   );
 }

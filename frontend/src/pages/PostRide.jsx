@@ -97,6 +97,18 @@ export default function PostRide() {
     if (pickup && drop) fetchRoute();
   }, [pickup, drop]);
 
+  useEffect(() => {
+    if (!routeInfo) return;
+    const fuelPrice = parseFloat(form.fuelPrice);
+    const mileage = parseFloat(form.mileage);
+    if (!fuelPrice || !mileage) return;
+
+    setRouteInfo((current) => current ? {
+      ...current,
+      pricePerKm: fuelPrice / mileage,
+    } : current);
+  }, [form.fuelPrice, form.mileage]);
+
   const fetchRoute = async () => {
     setStatus({ type: 'loading', msg: '🗺️ Calculating real road route...' });
     const { map, L } = mapObj.current;

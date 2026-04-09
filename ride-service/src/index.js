@@ -134,6 +134,25 @@ const start = async () => {
     await connectRedis();
     await connectProducer();
     await pool.query('SELECT 1');
+    await pool.query('CREATE EXTENSION IF NOT EXISTS dblink');
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ratings (
+        id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        booking_id     UUID NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+        ride_id        UUID NOT NULL REFERENCES rides(id) ON DELETE CASCADE,
+        from_user_id   UUID NOT NULL,
+        from_user_name VARCHAR(100) NOT NULL,
+        from_user_role VARCHAR(10) NOT NULL CHECK (from_user_role IN ('driver', 'rider')),
+        to_user_id     UUID NOT NULL,
+        to_user_role   VARCHAR(10) NOT NULL CHECK (to_user_role IN ('driver', 'rider')),
+        score          INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+        review_text    TEXT,
+        created_at     TIMESTAMP DEFAULT NOW(),
+        UNIQUE (booking_id, from_user_id, to_user_id)
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_ratings_target ON ratings(to_user_id, created_at DESC)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_ratings_booking ON ratings(booking_id)');
     console.log('[DB] PostgreSQL connected');
     startPaymentTimeoutCron();
     startRideAutoStartCron();

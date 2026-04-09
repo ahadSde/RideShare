@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuth from '../context/useAuth';
 import { authAPI } from '../api';
+import api from '../api';
 import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
 import { formatServerDate } from '../utils/datetime';
 
@@ -17,6 +18,11 @@ export default function Profile() {
     confirmPassword: '',
   });
   const [savingPassword, setSavingPassword] = useState(false);
+  const [reviewSummary, setReviewSummary] = useState({ averageRating: 0, totalReviews: 0 });
+  const [reviews, setReviews] = useState([]);
+  const [reviewsPage, setReviewsPage] = useState(1);
+  const [reviewsTotalPages, setReviewsTotalPages] = useState(1);
+  const [loadingReviews, setLoadingReviews] = useState(false);
   const isValidPhone = (value) => {
     if (!value.trim()) return true;
     const digits = value.replace(/\D/g, '');
@@ -34,6 +40,29 @@ export default function Profile() {
       phone: user.phone || '',
     });
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const loadReviews = async () => {
+      setLoadingReviews(true);
+      try {
+        const [summaryRes, reviewsRes] = await Promise.all([
+          api.get(`/rides/users/${user.id}/reviews/summary`),
+          api.get(`/rides/users/${user.id}/reviews`, { params: { page: reviewsPage, limit: 5 } }),
+        ]);
+        setReviewSummary(summaryRes.data.summary || { averageRating: 0, totalReviews: 0 });
+        setReviews(reviewsRes.data.reviews || []);
+        setReviewsTotalPages(reviewsRes.data.totalPages || 1);
+      } catch (err) {
+        showErrorToast(getApiErrorMessage(err, 'Failed to load your reviews.'));
+      } finally {
+        setLoadingReviews(false);
+      }
+    };
+
+    loadReviews();
+  }, [user?.id, reviewsPage]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -240,6 +269,65 @@ export default function Profile() {
               {savingPassword ? 'Updating...' : 'Update password'}
             </button>
           </form>
+        </div>
+
+        <div className="bg-[#16181f] border border-[#2a2d3a] rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold">Your Ratings & Reviews</h2>
+              <p className="text-gray-500 text-sm mt-1">See how other users rated their ride experience with you.</p>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-bold text-[#c8f135]">{reviewSummary.averageRating || 0}</div>
+              <div className="text-xs text-gray-500">{reviewSummary.totalReviews} review{reviewSummary.totalReviews === 1 ? '' : 's'}</div>
+            </div>
+          </div>
+
+          {loadingReviews ? (
+            <div className="text-gray-500 text-sm py-8 text-center">Loading reviews...</div>
+          ) : reviews.length === 0 ? (
+            <div className="text-gray-500 text-sm py-8 text-center">No reviews yet.</div>
+          ) : (
+            <div className="space-y-4">
+              {reviews.map((review) => (
+                <div key={review.id} className="bg-[#0e0f13] border border-[#2a2d3a] rounded-xl p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="font-medium text-sm">{review.from_user_name}</div>
+                      <div className="text-xs text-gray-500 capitalize mt-0.5">{review.from_user_role}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[#c8f135] text-sm">{'★'.repeat(review.score)}<span className="text-gray-600">{'★'.repeat(5 - review.score)}</span></div>
+                      <div className="text-xs text-gray-500 mt-1">{formatServerDate(review.created_at)}</div>
+                    </div>
+                  </div>
+                  {review.review_text && (
+                    <p className="text-sm text-gray-300 mt-3">{review.review_text}</p>
+                  )}
+                </div>
+              ))}
+
+              {reviewSummary.totalReviews > 5 && (
+                <div className="flex items-center justify-between pt-3">
+                  <span className="text-xs text-gray-500">Page {reviewsPage} of {reviewsTotalPages}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setReviewsPage((page) => Math.max(1, page - 1))}
+                      disabled={reviewsPage === 1}
+                      className="border border-[#2a2d3a] px-3 py-1.5 rounded-lg text-xs text-gray-300 disabled:opacity-40">
+                      Previous
+                    </button>
+                    <button
+                      onClick={() => setReviewsPage((page) => Math.min(reviewsTotalPages, page + 1))}
+                      disabled={reviewsPage === reviewsTotalPages}
+                      className="border border-[#2a2d3a] px-3 py-1.5 rounded-lg text-xs text-gray-300 disabled:opacity-40">
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         </div>
       </div>

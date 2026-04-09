@@ -5,6 +5,7 @@ import api from '../api';
 import { calculateFare } from '../utils/fare';
 import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
 import { formatServerDate, formatServerDateTime, parseServerDate } from '../utils/datetime';
+import UserReviewsModal from '../components/UserReviewsModal';
 
 export default function RideDetail() {
   const { rideId } = useParams();
@@ -27,6 +28,8 @@ export default function RideDetail() {
   const [posting,    setPosting]    = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [requested,  setRequested]  = useState(false);
+  const [reviewSummary, setReviewSummary] = useState({ averageRating: 0, totalReviews: 0 });
+  const [reviewsOpen, setReviewsOpen] = useState(false);
 
   // Determine if this is driver view
   // true if: URL has /comments OR user is a driver OR explicitly passed
@@ -45,6 +48,13 @@ export default function RideDetail() {
     fetchComments();
     if (!rideFromState) fetchRide();
   }, [rideId]);
+
+  useEffect(() => {
+    if (!ride?.driver_id || isDriverView) return;
+    api.get(`/rides/users/${ride.driver_id}/reviews/summary`)
+      .then((res) => setReviewSummary(res.data.summary || { averageRating: 0, totalReviews: 0 }))
+      .catch(() => {});
+  }, [ride?.driver_id, isDriverView]);
 
   const fetchRide = async () => {
     try {
@@ -267,6 +277,23 @@ export default function RideDetail() {
             </div>
           )}
 
+          {!isDriverView && ride.driver_id && (
+            <div className="bg-[#0e0f13] border border-[#2a2d3a] rounded-xl p-4 mb-4 flex items-center justify-between gap-4">
+              <div>
+                <div className="text-xs text-gray-500 mb-1">⭐ Driver reviews</div>
+                <div className="text-sm font-medium">
+                  {reviewSummary.averageRating || 0} / 5
+                  <span className="text-gray-500 font-normal"> · {reviewSummary.totalReviews} review{reviewSummary.totalReviews === 1 ? '' : 's'}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setReviewsOpen(true)}
+                className="border border-[#2a2d3a] text-gray-300 hover:text-white hover:border-[#c8f135] px-3 py-2 rounded-lg text-sm transition-all">
+                View all reviews
+              </button>
+            </div>
+          )}
+
           {/* Fare breakdown — RIDER ONLY */}
           {!isDriverView && !isBookingContextView && riderDist > 0 && fareAmount > 0 && (
             <div className="bg-[#c8f135]/05 border border-[#c8f135]/15 rounded-xl p-4 mb-5">
@@ -413,6 +440,12 @@ export default function RideDetail() {
           )}
         </div>
       </div>
+      <UserReviewsModal
+        open={reviewsOpen}
+        onClose={() => setReviewsOpen(false)}
+        userId={ride?.driver_id}
+        title="Driver Reviews"
+      />
     </div>
   );
 }

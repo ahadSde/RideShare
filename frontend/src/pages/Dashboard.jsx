@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api, { rideAPI } from '../api';
 import useAuth from '../context/useAuth';
-import { rideAPI } from '../api';
 import { formatServerDate, parseServerDate } from '../utils/datetime';
+import SubmitRatingModal from '../components/SubmitRatingModal';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -11,6 +12,8 @@ export default function Dashboard() {
   const [showAll, setShowAll] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [ratingTarget, setRatingTarget] = useState(null);
+  const [reviewSummary, setReviewSummary] = useState({ averageRating: 0, totalReviews: 0 });
   const pageSize = 5;
 
   const filteredRides = rides.filter(ride => {
@@ -65,6 +68,19 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    api.get(`/rides/users/${user.id}/reviews/summary`)
+      .then((res) => setReviewSummary(res.data.summary || { averageRating: 0, totalReviews: 0 }))
+      .catch(() => {});
+  }, [user?.id]);
+
+  const reloadRides = () => {
+    rideAPI.my()
+      .then(res => setRides(res.data.data || []))
+      .catch(() => {});
+  };
+
   const statusColor = (s) => ({
     active:      'bg-blue-500/10 text-blue-400 border border-blue-500/20',
     in_progress: 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20',
@@ -115,7 +131,11 @@ export default function Dashboard() {
         <div className="grid grid-cols-3 gap-4 mb-8">
           {[
             { icon: '🚗', label: user?.role === 'driver' ? 'Rides Posted' : 'Rides Booked', value: rides.length },
-            { icon: '⭐', label: 'Rating', value: '4.9' },
+            {
+              icon: '⭐',
+              label: reviewSummary.totalReviews ? `Rating (${reviewSummary.totalReviews})` : 'Rating',
+              value: reviewSummary.totalReviews ? reviewSummary.averageRating.toFixed(1) : '—',
+            },
             { icon: '🌿', label: 'CO₂ Saved', value: `${rides.length * 6} kg` },
           ].map((s, i) => (
             <div key={i} className="bg-[#16181f] border border-[#2a2d3a] rounded-2xl p-6">
@@ -223,6 +243,21 @@ export default function Dashboard() {
                         ⚡ Pay Now!
                       </button>
                     )}
+                    {user?.role === 'rider' && ride.ride_status === 'completed' && ride.status === 'confirmed' && !ride.my_rating_id && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRatingTarget({ bookingId: ride.id, label: 'the driver' });
+                        }}
+                        className="border border-[#c8f135]/30 text-[#c8f135] text-xs font-bold px-3 py-1.5 rounded-lg">
+                        ⭐ Rate Driver
+                      </button>
+                    )}
+                    {user?.role === 'rider' && ride.my_rating_id && (
+                      <span className="text-xs px-3 py-1 rounded-full bg-[#c8f135]/10 text-[#c8f135] border border-[#c8f135]/20">
+                        Rated {ride.my_rating_score}★
+                      </span>
+                    )}
                     <span className="text-[#c8f135] font-bold text-sm">
                       ₹{ride.fare_amount || Math.round(ride.distance_km * ride.price_per_km)}
                     </span>
@@ -259,6 +294,13 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+      <SubmitRatingModal
+        open={!!ratingTarget}
+        onClose={() => setRatingTarget(null)}
+        bookingId={ratingTarget?.bookingId}
+        targetLabel={ratingTarget?.label}
+        onSubmitted={reloadRides}
+      />
     </div>
   );
 }

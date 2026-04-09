@@ -5,6 +5,11 @@ const { publishEvent } = require('../kafka/producer');
 const { normalizeBookingDeadline } = require('../utils/datetime');
 
 const router = express.Router();
+const authDblinkConn = [
+  `dbname=${process.env.AUTH_DB_NAME || 'auth_db'}`,
+  `user=${process.env.AUTH_DB_USER || process.env.DB_USER || 'carpool'}`,
+  `password=${process.env.AUTH_DB_PASSWORD || process.env.DB_PASSWORD || 'carpool123'}`,
+].join(' ');
 
 // ─────────────────────────────────────
 // POST /rides/:rideId/request
@@ -218,16 +223,21 @@ router.get('/:rideId/requests', async (req, res) => {
 
     const result = await pool.query(
       `SELECT b.*, 
-        u.name as rider_name, u.phone as rider_phone
+        u.name as rider_name, u.phone as rider_phone,
+        mr.id AS my_rating_id,
+        mr.score AS my_rating_score
        FROM bookings b
-       LEFT JOIN dblink('dbname=auth_db user=carpool password=carpool123',
+       LEFT JOIN dblink('${authDblinkConn}',
          'SELECT id, name, phone FROM users'
        ) AS u(id uuid, name varchar, phone varchar)
        ON b.rider_id = u.id
+       LEFT JOIN ratings mr
+         ON mr.booking_id = b.id
+        AND mr.from_user_id = $2
        WHERE b.ride_id = $1
        AND b.status IN ('requested', 'approved', 'payment_pending', 'confirmed')
        ORDER BY b.queue_position ASC, b.created_at ASC`,
-      [rideId]
+      [rideId, driverId]
     );
 
     res.json({ requests: result.rows.map(normalizeBookingDeadline) });

@@ -7,6 +7,12 @@ const { publishEvent } = require('../kafka/producer');
 const { normalizeBookingDeadline } = require('../utils/datetime');
 
 const router = express.Router();
+const authDblinkConn = [
+  `dbname=${process.env.AUTH_DB_NAME || 'auth_db'}`,
+  `user=${process.env.AUTH_DB_USER || process.env.DB_USER || 'carpool'}`,
+  `password=${process.env.AUTH_DB_PASSWORD || process.env.DB_PASSWORD || 'carpool123'}`,
+].join(' ');
+const escapeSqlLiteral = (value) => String(value).replace(/'/g, "''");
 const padTimestamp = (value) => String(value).padStart(2, '0');
 const formatTimestampForDb = (date) => {
   const milliseconds = String(date.getMilliseconds()).padStart(3, '0');
@@ -379,9 +385,14 @@ router.get('/my', async (req, res) => {
       result = await pool.query(
         `SELECT b.*, r.from_name, r.to_name, 
                 r.departure_time, r.driver_id, r.status AS ride_status,
-                r.price_per_km, r.distance_km as route_distance
+                r.price_per_km, r.distance_km as route_distance,
+                mr.id AS my_rating_id,
+                mr.score AS my_rating_score
          FROM bookings b
          JOIN rides r ON b.ride_id = r.id
+         LEFT JOIN ratings mr
+           ON mr.booking_id = b.id
+          AND mr.from_user_id = $1
          WHERE b.rider_id = $1
          ORDER BY b.created_at DESC`,
         [req.user.id]
@@ -428,6 +439,165 @@ router.get('/booking/:bookingId', async (req, res) => {
   } catch (err) {
     console.error('[GetBooking]', err.message);
     res.status(500).json({ error: 'Failed to fetch booking' });
+  }
+});
+
+// GET /rides/users/:userId/reviews/summary — summary of received ratings
+router.get('/users/:userId/reviews/summary', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+         COUNT(*)::int AS total_reviews,
+         COALESCE(ROUND(AVG(score)::numeric, 1), 0) AS average_rating
+       FROM ratings
+       WHERE to_user_id = $1`,
+      [req.params.userId]
+    );
+
+    res.json({
+      summary: {
+        totalReviews: result.rows[0]?.total_reviews || 0,
+        averageRating: parseFloat(result.rows[0]?.average_rating || 0),
+      },
+    });
+  } catch (err) {
+    console.error('[ReviewSummary]', err.message);
+    res.status(500).json({ error: 'Failed to fetch review summary' });
+  }
+});
+
+// GET /rides/users/:userId/reviews — paginated received ratings
+router.get('/users/:userId/reviews', async (req, res) => {
+  const page = Math.max(parseInt(req.query.page || '1', 10), 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit || '5', 10), 1), 20);
+  const offset = (page - 1) * limit;
+
+  try {
+    const [countResult, reviewsResult] = await Promise.all([
+      pool.query('SELECT COUNT(*)::int AS total FROM ratings WHERE to_user_id = $1', [req.params.userId]),
+      pool.query(
+        `SELECT id, booking_id, ride_id, from_user_id, from_user_name, from_user_role, score, review_text, created_at
+         FROM ratings
+         WHERE to_user_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [req.params.userId, limit, offset]
+      ),
+    ]);
+
+    const total = countResult.rows[0]?.total || 0;
+    res.json({
+      reviews: reviewsResult.rows,
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
+  } catch (err) {
+    console.error('[ReviewsList]', err.message);
+    res.status(500).json({ error: 'Failed to fetch reviews' });
+  }
+});
+
+// POST /rides/bookings/:bookingId/reviews — create rider->driver or driver->rider rating
+router.post('/bookings/:bookingId/reviews', [
+  body('score').isInt({ min: 1, max: 5 }),
+  body('reviewText').optional().isString().isLength({ max: 500 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const { bookingId } = req.params;
+  const { score, reviewText } = req.body;
+
+  try {
+    const bookingResult = await pool.query(
+      `SELECT
+         b.id, b.ride_id, b.rider_id,
+         r.driver_id, r.status AS ride_status
+       FROM bookings b
+       JOIN rides r ON b.ride_id = r.id
+       WHERE b.id = $1`,
+      [bookingId]
+    );
+
+    if (bookingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const booking = bookingResult.rows[0];
+    if (booking.ride_status !== 'completed') {
+      return res.status(400).json({ error: 'Ratings are allowed only after the ride is completed' });
+    }
+
+    let toUserId;
+    let toUserRole;
+    if (req.user.role === 'rider') {
+      if (booking.rider_id !== req.user.id) {
+        return res.status(403).json({ error: 'Not authorized to rate this driver' });
+      }
+      toUserId = booking.driver_id;
+      toUserRole = 'driver';
+    } else if (req.user.role === 'driver') {
+      if (booking.driver_id !== req.user.id) {
+        return res.status(403).json({ error: 'Not authorized to rate this rider' });
+      }
+      toUserId = booking.rider_id;
+      toUserRole = 'rider';
+    } else {
+      return res.status(403).json({ error: 'Invalid rating role' });
+    }
+
+    let fromUserName = req.user.email || 'User';
+    try {
+      const nameLookup = await pool.query(
+        `SELECT id, name
+         FROM dblink(
+           '${authDblinkConn}',
+           'SELECT id, name FROM users WHERE id IN (''${escapeSqlLiteral(req.user.id)}'', ''${escapeSqlLiteral(toUserId)}'')'
+         ) AS u(id uuid, name varchar)`
+      );
+      const nameMap = new Map(nameLookup.rows.map((row) => [row.id, row.name]));
+      fromUserName = nameMap.get(req.user.id) || fromUserName;
+    } catch (lookupErr) {
+      console.error('[CreateRating] name lookup fallback:', lookupErr.message);
+    }
+
+    const result = await pool.query(
+      `INSERT INTO ratings (
+         booking_id, ride_id,
+         from_user_id, from_user_name, from_user_role,
+         to_user_id, to_user_role,
+         score, review_text
+       ) VALUES (
+         $1, $2,
+         $3, $4, $5,
+         $6, $7,
+         $8, $9
+       )
+       ON CONFLICT (booking_id, from_user_id, to_user_id) DO NOTHING
+       RETURNING *`,
+      [
+        booking.id,
+        booking.ride_id,
+        req.user.id,
+        fromUserName,
+        req.user.role,
+        toUserId,
+        toUserRole,
+        score,
+        reviewText?.trim() || null,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(409).json({ error: 'You have already submitted a rating for this booking' });
+    }
+
+    res.status(201).json({ message: 'Rating submitted successfully', rating: result.rows[0] });
+  } catch (err) {
+    console.error('[CreateRating]', err.message);
+    res.status(500).json({ error: 'Failed to submit rating' });
   }
 });
 
