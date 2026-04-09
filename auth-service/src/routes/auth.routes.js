@@ -1,11 +1,13 @@
 require('dotenv').config();
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const pool = require('../db');
 const { client: redis } = require('../redis');
 const { authenticate } = require('../middleware/auth');
+const { publishEvent } = require('../kafka/producer');
 
 const router = express.Router();
 
@@ -131,6 +133,54 @@ router.post('/login', [
 });
 
 // ─────────────────────────────────────
+// POST /auth/forgot-password
+// Creates a short-lived reset token and sends reset email asynchronously
+// ─────────────────────────────────────
+router.post('/forgot-password', [
+  body('email').isEmail().withMessage('Valid email required'),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { email } = req.body;
+
+  try {
+    const result = await pool.query(
+      'SELECT id, name, email FROM users WHERE email = $1',
+      [email]
+    );
+
+    if (result.rows.length > 0) {
+      const user = result.rows[0];
+      const token = crypto.randomBytes(32).toString('hex');
+      const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
+
+      await redis.setEx(
+        `password-reset:${token}`,
+        900,
+        JSON.stringify({ userId: user.id, email: user.email })
+      );
+
+      await publishEvent('auth.password_reset_requested', {
+        email: user.email,
+        name: user.name,
+        resetLink,
+        expiresInMinutes: 15,
+      });
+    }
+
+    res.json({
+      message: 'If an account exists for that email, a password reset link has been sent.',
+    });
+  } catch (err) {
+    console.error('[ForgotPassword]', err.message);
+    res.status(500).json({ error: 'Server error while processing forgot password request' });
+  }
+});
+
+// ─────────────────────────────────────
 // POST /auth/logout
 // Adds token to Redis blacklist — this is how we invalidate JWT tokens
 // ─────────────────────────────────────
@@ -235,6 +285,94 @@ router.patch('/me', authenticate, [
   } catch (err) {
     console.error('[UpdateProfile]', err.message);
     res.status(500).json({ error: 'Server error while updating profile' });
+  }
+});
+
+// ─────────────────────────────────────
+// PATCH /auth/me/password — Change current user password
+// ─────────────────────────────────────
+router.patch('/me/password', authenticate, [
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { currentPassword, newPassword } = req.body;
+
+  if (currentPassword === newPassword) {
+    return res.status(400).json({ error: 'New password must be different from current password' });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT id, password FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    await pool.query(
+      'UPDATE users SET password = $1 WHERE id = $2',
+      [hashedPassword, req.user.id]
+    );
+
+    await redis.del(`user:${req.user.id}`);
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (err) {
+    console.error('[ChangePassword]', err.message);
+    res.status(500).json({ error: 'Server error while changing password' });
+  }
+});
+
+// ─────────────────────────────────────
+// POST /auth/reset-password
+// Resets password using a one-time token from Redis
+// ─────────────────────────────────────
+router.post('/reset-password', [
+  body('token').notEmpty().withMessage('Reset token is required'),
+  body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { token, newPassword } = req.body;
+
+  try {
+    const stored = await redis.get(`password-reset:${token}`);
+    if (!stored) {
+      return res.status(400).json({ error: 'Reset link is invalid or has expired' });
+    }
+
+    const { userId } = JSON.parse(stored);
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    await pool.query(
+      'UPDATE users SET password = $1 WHERE id = $2',
+      [hashedPassword, userId]
+    );
+
+    await redis.del(`password-reset:${token}`);
+    await redis.del(`user:${userId}`);
+
+    res.json({ message: 'Password reset successfully' });
+  } catch (err) {
+    console.error('[ResetPassword]', err.message);
+    res.status(500).json({ error: 'Server error while resetting password' });
   }
 });
 

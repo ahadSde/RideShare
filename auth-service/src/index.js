@@ -4,6 +4,7 @@ const rateLimit = require('express-rate-limit');
 const { connectRedis } = require('./redis');
 const pool = require('./db');
 const authRoutes = require('./routes/auth.routes');
+const { connectProducer } = require('./kafka/producer');
 
 const app = express();
 app.use(express.json());
@@ -27,6 +28,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok', service: 'auth-service
 const start = async () => {
   try {
     await connectRedis();
+    await connectProducer();
     await pool.query('SELECT 1'); // test DB connection
     console.log('[DB] PostgreSQL connected');
     app.listen(process.env.PORT, () => {

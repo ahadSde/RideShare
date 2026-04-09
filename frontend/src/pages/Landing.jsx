@@ -126,6 +126,16 @@ export default function Landing() {
             <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Password</label>
             <input name="password" type="password" value={form.password} onChange={handle} placeholder="••••••••"
               className="w-full bg-[#0e0f13] border border-[#2a2d3a] rounded-lg px-4 py-3 text-sm text-white placeholder-gray-600 focus:border-[#c8f135] outline-none"/>
+            {mode === 'login' && (
+              <div className="mt-2 text-right">
+                <button
+                  type="button"
+                  onClick={() => navigate('/forgot-password')}
+                  className="text-xs text-[#c8f135] hover:underline">
+                  Forgot password?
+                </button>
+              </div>
+            )}
           </div>
 
           <button onClick={submit} disabled={loading}

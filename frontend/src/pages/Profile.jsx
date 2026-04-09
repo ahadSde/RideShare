@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuth from '../context/useAuth';
+import { authAPI } from '../api';
 import { getApiErrorMessage, showErrorToast, showSuccessToast } from '../utils/toast';
 import { formatServerDate } from '../utils/datetime';
 
@@ -10,6 +11,12 @@ export default function Profile() {
 
   const [form, setForm] = useState({ name: '', phone: '' });
   const [saving, setSaving] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [savingPassword, setSavingPassword] = useState(false);
   const isValidPhone = (value) => {
     if (!value.trim()) return true;
     const digits = value.replace(/\D/g, '');
@@ -50,6 +57,38 @@ export default function Profile() {
     }
   };
 
+  const onPasswordSubmit = async (e) => {
+    e.preventDefault();
+    if (savingPassword) return;
+
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      showErrorToast('Fill in all password fields.');
+      return;
+    }
+    if (passwordForm.newPassword.length < 6) {
+      showErrorToast('New password must be at least 6 characters.');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      showErrorToast('New password and confirm password do not match.');
+      return;
+    }
+
+    setSavingPassword(true);
+    try {
+      await authAPI.changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      showSuccessToast('Password updated successfully.');
+    } catch (err) {
+      showErrorToast(getApiErrorMessage(err, 'Failed to update password.'));
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -82,6 +121,7 @@ export default function Profile() {
           </div>
         </div>
 
+        <div className="space-y-6">
         <div className="bg-[#16181f] border border-[#2a2d3a] rounded-2xl p-6">
           <div className="mb-6">
             <h2 className="text-xl font-bold">Edit Profile</h2>
@@ -148,6 +188,59 @@ export default function Profile() {
               </button>
             </div>
           </form>
+        </div>
+
+        <div className="bg-[#16181f] border border-[#2a2d3a] rounded-2xl p-6">
+          <div className="mb-6">
+            <h2 className="text-xl font-bold">Change Password</h2>
+            <p className="text-gray-500 text-sm mt-1">
+              Use your current password to set a new one.
+            </p>
+          </div>
+
+          <form onSubmit={onPasswordSubmit} className="space-y-5">
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Current password</label>
+              <input
+                type="password"
+                value={passwordForm.currentPassword}
+                onChange={(e) => setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                className="w-full bg-[#0e0f13] border border-[#2a2d3a] rounded-xl px-4 py-3 outline-none focus:border-[#c8f135]"
+                placeholder="Enter current password"
+              />
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">New password</label>
+                <input
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                  className="w-full bg-[#0e0f13] border border-[#2a2d3a] rounded-xl px-4 py-3 outline-none focus:border-[#c8f135]"
+                  placeholder="Minimum 6 characters"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Confirm password</label>
+                <input
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                  className="w-full bg-[#0e0f13] border border-[#2a2d3a] rounded-xl px-4 py-3 outline-none focus:border-[#c8f135]"
+                  placeholder="Re-enter new password"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingPassword}
+              className="bg-[#c8f135] text-[#0e0f13] px-5 py-3 rounded-xl font-bold disabled:opacity-60">
+              {savingPassword ? 'Updating...' : 'Update password'}
+            </button>
+          </form>
+        </div>
         </div>
       </div>
     </div>

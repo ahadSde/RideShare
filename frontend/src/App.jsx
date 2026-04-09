@@ -10,6 +10,8 @@ import RideDetail     from './pages/RideDetail';
 import DriverRequests from './pages/DriverRequests';
 import PayNow         from './pages/PayNow';
 import Profile        from './pages/Profile';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword  from './pages/ResetPassword';
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -37,6 +39,8 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/"                      element={<PublicRoute><Landing /></PublicRoute>} />
+          <Route path="/forgot-password"      element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+          <Route path="/reset-password"       element={<PublicRoute><ResetPassword /></PublicRoute>} />
           <Route path="/dashboard"             element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           <Route path="/post-ride"             element={<PrivateRoute><PostRide /></PrivateRoute>} />
           <Route path="/search"                element={<PrivateRoute><SearchRide /></PrivateRoute>} />

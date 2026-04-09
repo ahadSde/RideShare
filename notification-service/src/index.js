@@ -169,6 +169,26 @@ const templates = {
     subject: '✅ Ride Completed',
     html:    `<p>Ride ${data.rideId} has been marked as completed.</p>`,
   }),
+
+  'auth.password_reset_requested': (data) => ({
+    to: data.email,
+    subject: 'Reset Your RideShare Password',
+    html: `
+      <div style="font-family:sans-serif;max-width:500px;margin:auto;padding:24px;background:#f9f9f9;border-radius:12px;">
+        <h2 style="color:#0e0f13;">Reset your password</h2>
+        <p>Hi ${data.name || 'there'},</p>
+        <p>We received a request to reset your RideShare password.</p>
+        <p>This link will expire in <b>${data.expiresInMinutes || 15} minutes</b>.</p>
+        <div style="margin:24px 0;">
+          <a href="${data.resetLink}" style="display:inline-block;background:#c8f135;color:#0e0f13;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:bold;">
+            Reset Password
+          </a>
+        </div>
+        <p>If you did not request this, you can safely ignore this email.</p>
+        <p style="color:#666;font-size:13px;">— RideShare Team</p>
+      </div>
+    `,
+  }),
 };
 
 // ─────────────────────────────────────
@@ -210,6 +230,7 @@ const run = async () => {
       'seat.rejected',
       'payment.timeout',
       'ride.autocompleted',
+      'auth.password_reset_requested',
     ],
     fromBeginning: false,
   });

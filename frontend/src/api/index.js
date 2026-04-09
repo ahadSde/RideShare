@@ -18,6 +18,9 @@ export const authAPI = {
   logout:   ()     => api.post('/auth/logout'),
   me:       ()     => api.get('/auth/me'),
   updateMe: (data) => api.patch('/auth/me', data),
+  changePassword: (data) => api.patch('/auth/me/password', data),
+  forgotPassword: (data) => api.post('/auth/forgot-password', data),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
 };
 
 export const rideAPI = {
