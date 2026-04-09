@@ -10,6 +10,8 @@ export default function Dashboard() {
   const [rides, setRides] = useState([]);
   const [showAll, setShowAll] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 5;
 
   const filteredRides = rides.filter(ride => {
     if (user?.role === 'driver') {
@@ -29,10 +31,26 @@ export default function Dashboard() {
     }
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredRides.length / pageSize));
+  const paginatedRides = filteredRides.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
   const handleLogout = async () => {
     await logout();
     navigate('/');
   };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [showAll, user?.role]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   useEffect(() => {
     const loadRides = () => {
@@ -149,8 +167,9 @@ export default function Dashboard() {
               </button>
             </div>
           ) : (
+            <>
             <div className="divide-y divide-[#2a2d3a]">
-              {filteredRides.map((ride, i) => (
+              {paginatedRides.map((ride, i) => (
                 <div key={i} className="py-4 flex items-center justify-between hover:bg-[#1e2029] rounded-xl px-3 -mx-3 transition-all">
                   <div>
                     <div className="font-medium text-sm flex items-center gap-2">
@@ -211,6 +230,32 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
+            {filteredRides.length > pageSize && (
+              <div className="flex items-center justify-between pt-5 mt-5 border-t border-[#2a2d3a]">
+                <p className="text-xs text-gray-500">
+                  Showing {(currentPage - 1) * pageSize + 1}-
+                  {Math.min(currentPage * pageSize, filteredRides.length)} of {filteredRides.length}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                    disabled={currentPage === 1}
+                    className="border border-[#2a2d3a] px-3 py-1.5 rounded-lg text-xs text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#c8f135] hover:text-white transition-all">
+                    Previous
+                  </button>
+                  <span className="text-xs text-gray-500 px-2">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                    disabled={currentPage === totalPages}
+                    className="border border-[#2a2d3a] px-3 py-1.5 rounded-lg text-xs text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#c8f135] hover:text-white transition-all">
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </div>
       </div>
