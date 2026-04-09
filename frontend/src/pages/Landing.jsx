@@ -13,9 +13,21 @@ export default function Landing() {
   const [loading, setLoading] = useState(false);
 
   const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const isValidPhone = (value) => {
+    const digits = value.replace(/\D/g, '');
+    return (
+      digits.length === 10 && /^[6-9]/.test(digits)
+    ) || (
+      digits.length === 12 && digits.startsWith('91') && /^[6-9]/.test(digits.slice(2))
+    );
+  };
 
   const submit = async () => {
     if (loading) return;
+    if (mode === 'register' && form.phone.trim() && !isValidPhone(form.phone.trim())) {
+      showErrorToast('Enter a valid 10-digit Indian mobile number.');
+      return;
+    }
     setLoading(true);
     try {
       if (mode === 'login') {
@@ -102,9 +114,11 @@ export default function Landing() {
               className="w-full bg-[#0e0f13] border border-[#2a2d3a] rounded-lg px-4 py-3 text-sm text-white placeholder-gray-600 focus:border-[#c8f135] outline-none"/>
           </div>
           {mode === 'register' && (
-            <div className="mb-4">
-              <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Phone</label>
+          <div className="mb-4">
+            <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Phone</label>
               <input name="phone" value={form.phone} onChange={handle} placeholder="+91 98765 43210"
+                inputMode="tel"
+                maxLength={14}
                 className="w-full bg-[#0e0f13] border border-[#2a2d3a] rounded-lg px-4 py-3 text-sm text-white placeholder-gray-600 focus:border-[#c8f135] outline-none"/>
             </div>
           )}

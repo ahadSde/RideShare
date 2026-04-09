@@ -62,6 +62,11 @@ export default function Dashboard() {
       <nav className="flex items-center justify-between px-8 py-4 border-b border-[#2a2d3a] bg-[#0e0f13]/95 backdrop-blur sticky top-0 z-50">
         <div className="text-xl font-extrabold">Ride<span className="text-[#c8f135]">Share</span></div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/profile')}
+            className="border border-[#2a2d3a] text-white px-4 py-2 rounded-lg text-sm hover:border-[#c8f135] hover:text-[#c8f135] transition-all">
+            Profile
+          </button>
           {user?.role === 'rider' && (
             <button onClick={() => navigate('/search')}
               className="border border-[#2a2d3a] text-white px-4 py-2 rounded-lg text-sm hover:border-[#c8f135] hover:text-[#c8f135] transition-all">

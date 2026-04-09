@@ -17,6 +17,7 @@ export const authAPI = {
   login:    (data) => api.post('/auth/login', data),
   logout:   ()     => api.post('/auth/logout'),
   me:       ()     => api.get('/auth/me'),
+  updateMe: (data) => api.patch('/auth/me', data),
 };
 
 export const rideAPI = {

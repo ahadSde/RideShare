@@ -9,6 +9,15 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
+const isValidIndianPhone = (value) => {
+  if (value === undefined || value === null || value === '') return true;
+  const digits = String(value).replace(/\D/g, '');
+  return (
+    /^[6-9]\d{9}$/.test(digits) ||
+    /^91[6-9]\d{9}$/.test(digits)
+  );
+};
+
 // ─────────────────────────────────────
 // POST /auth/register
 // ─────────────────────────────────────
@@ -17,7 +26,10 @@ router.post('/register', [
   body('email').isEmail().withMessage('Valid email required'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('role').isIn(['driver', 'rider']).withMessage('Role must be driver or rider'),
-  body('phone').optional().isMobilePhone(),
+  body('phone')
+    .optional({ nullable: true, checkFalsy: true })
+    .custom(isValidIndianPhone)
+    .withMessage('Enter a valid 10-digit Indian mobile number'),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -173,6 +185,56 @@ router.get('/me', authenticate, async (req, res) => {
   } catch (err) {
     console.error('[Me]', err.message);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ─────────────────────────────────────
+// PATCH /auth/me — Update current user profile
+// Allows basic editable profile fields while keeping auth claims stable
+// ─────────────────────────────────────
+router.patch('/me', authenticate, [
+  body('name').optional().trim().notEmpty().withMessage('Name cannot be empty'),
+  body('phone')
+    .optional({ nullable: true, checkFalsy: true })
+    .custom(isValidIndianPhone)
+    .withMessage('Enter a valid 10-digit Indian mobile number'),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { name, phone } = req.body;
+
+  if (name === undefined && phone === undefined) {
+    return res.status(400).json({ error: 'Nothing to update' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE users
+       SET name = COALESCE($1, name),
+           phone = CASE
+             WHEN $2::text IS NULL THEN phone
+             WHEN $2::text = '' THEN NULL
+             ELSE $2
+           END
+       WHERE id = $3
+       RETURNING id, name, email, role, phone, created_at`,
+      [name ?? null, phone ?? null, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+    await redis.setEx(`user:${user.id}`, 3600, JSON.stringify(user));
+
+    res.json({ message: 'Profile updated successfully', user });
+  } catch (err) {
+    console.error('[UpdateProfile]', err.message);
+    res.status(500).json({ error: 'Server error while updating profile' });
   }
 });
 
